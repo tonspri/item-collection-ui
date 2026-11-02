@@ -1,0 +1,205 @@
+//===== Item Collection UI v1.2.0 ==========================================
+//= Server side of the Item Collection window (client/index.js).
+//= The collection is account-wide: deposited cards are kept in the mod
+//= store's account scope under client.c.<card id>, which the window reads.
+//=
+//= Requests, from api.server.request('icui', ...):
+//=   @icui <n> sync              -> ok|<era>|<zeny>
+//=   @icui <n> bag <card>        -> ok|<count in bag>
+//=   @icui <n> dep <card> <amt>  -> ok|<deposited>|<zeny>|<message>
+//=   @icui <n> wd <card> <amt>   -> ok|<deposited>|<zeny>|<message>
+//=   @icui <n> act <combo>       -> ok|<message>
+//= Anything refused answers err|<message>. Level 0, so every check is here.
+//=
+//= Combos only look at what is deposited and use nothing up. Activating sets
+//= client.a.<combo>; its bonus counts while that is set and the cards are there.
+//=
+//= Bonuses: one bonus_script per change, holding only the difference from
+//= what this character already has. Flags 8 (gone at logout) + 512 (other
+//= scripts' bonus_script_clear leaves it) + 2048 (equal deltas may repeat).
+//= Every login starts from nothing and applies the whole total again.
+//===========================================================================
+-	script	ItemCollectionUI	-1,{
+	end;
+
+OnInit:
+	bindatcmd "icui", strnpcinfo(3) + "::OnRequest", 0, 99;
+	// Typing @collection opens the window too.
+	bindatcmd "collection", strnpcinfo(3) + "::OnOpen", 0, 99;
+	setarray .bonus$[0], "bBaseAtk", "bMatk", "bMaxHP", "bMaxSP", "bDef", "bMdef", "bFlee", "bHit", "bStr", "bAgi", "bVit", "bInt", "bDex", "bLuk", "bFlee2", "bCritical", "bLongAtkRate", "bAspdRate", "bMaxHPrate", "bMaxSPrate";
+	setarray .kindA[0], 0, 2, 4, 6, 3, 5, 7, 2;
+	setarray .valueA[0], 1, 10, 1, 1, 5, 1, 1, 5;
+	setarray .kindB[0], 1, -1, -1, -1, -1, -1, -1, -1;
+	setarray .valueB[0], 1, 0, 0, 0, 0, 0, 0, 0;
+	setarray .comboName$[1], "Poring Family", "Field Critters", "Restless Dead", "Orc Warband", "Sky Hunters", "Shadow Thieves", "Arcane Circle", "Fallen Knights", "Legends of Midgard";
+	setarray .comboCards$[1], "4001,4004,4033,4196,4341", "4006,4002,4003,4009,4010", "4038,4025,4106,4110,4090", "4066,4071,4085,4256,4255", "4015,4325,4056,4040,4019", "4016,4020,4064,4042,4051", "4113,4190,4141,4171,4139", "4133,4136,4140,4320,4187", "4144,4142,4134,4131,4143";
+	setarray .comboGives$[1], "13:5,14:3", "10:3,18:3", "11:2,19:5", "8:5,0:15", "12:5,16:5", "9:5,15:5", "11:5,1:15", "10:5,18:5", "8:2,9:2,10:2,11:2,12:2,13:2,17:5";
+	end;
+
+OnOpen:
+	dispbottom "@@event icui open";
+	end;
+
+OnPCLoginEvent:
+	deletearray @icui_t;
+	callsub S_Apply;
+	end;
+
+OnRequest:
+	.@req = atoi(.@atcmd_parameters$[0]);
+	if (.@req <= 0)
+		end;
+	.@op$ = .@atcmd_parameters$[1];
+	if (getstrlen($@ICUI_era$) == 0) {
+		.@out$ = "err|The card list did not load. Check the server log.";
+	} else if (.@op$ == "sync") {
+		.@out$ = "ok|" + $@ICUI_era$ + "|" + Zeny;
+	} else if (.@op$ == "bag") {
+		.@id = atoi(.@atcmd_parameters$[2]);
+		// Not ?: because both sides of it always run, and countitem stops the script on a bad id.
+		if ($@ICUI_tier[.@id])
+			.@out$ = "ok|" + countitem(.@id);
+		else
+			.@out$ = "err|That is not a collectable card.";
+	} else if (.@op$ == "dep" || .@op$ == "wd") {
+		.@out$ = callsub(S_Move, .@op$, atoi(.@atcmd_parameters$[2]), atoi(.@atcmd_parameters$[3]));
+	} else if (.@op$ == "act") {
+		.@out$ = callsub(S_Activate, atoi(.@atcmd_parameters$[2]));
+	} else {
+		.@out$ = "err|Unknown request.";
+	}
+	dispbottom "@@reply " + .@req + " 1/1 " + .@out$;
+	end;
+
+// S_Move("dep"|"wd", card id, amount) -> reply text
+S_Move:
+	.@op$ = getarg(0);
+	.@id = getarg(1);
+	.@n = getarg(2);
+	.@tier = $@ICUI_tier[.@id];
+	if (.@tier < 1 || getitemname(.@id) == "null")
+		return "err|That is not a collectable card.";
+	if (.@n < 1)
+		return "err|Choose how many.";
+	.@need = callsub(S_Need, .@tier);
+	.@path$ = "client.c." + .@id;
+	.@have = modstore_get("account", .@path$, 0);
+	.@name$ = getitemname(.@id);
+	if (.@op$ == "dep") {
+		if (.@have >= .@need)
+			return "err|" + .@name$ + " is already complete.";
+		.@bag = countitem(.@id);
+		if (.@bag < 1)
+			return "err|You have no " + .@name$ + " in your inventory.";
+		.@n = min(.@n, .@need - .@have, .@bag);
+		.@cost = .@n * callfunc("F_ModSetting", "item-collection-ui", "deposit_fee", 1000);
+		if (Zeny < .@cost)
+			return "err|Depositing " + .@n + " costs " + callfunc("F_InsertComma", .@cost) + " Zeny.";
+		delitem .@id, .@n;
+		if (!modstore_set("account", .@path$, .@have + .@n)) {
+			getitem .@id, .@n;
+			return "err|The collection is full. Nothing was taken.";
+		}
+		Zeny -= .@cost;
+		.@have += .@n;
+		.@msg$ = "Deposited " + .@n + " " + .@name$ + ".";
+	} else {
+		if (.@have < 1)
+			return "err|No " + .@name$ + " is deposited.";
+		.@n = min(.@n, .@have);
+		.@cost = .@n * callfunc("F_ModSetting", "item-collection-ui", "withdraw_fee", 10000);
+		if (Zeny < .@cost)
+			return "err|Withdrawing " + .@n + " costs " + callfunc("F_InsertComma", .@cost) + " Zeny.";
+		if (!checkweight(.@id, .@n))
+			return "err|You cannot carry " + .@n + " more " + .@name$ + ".";
+		if (!modstore_set("account", .@path$, .@have - .@n))
+			return "err|The collection could not be saved. Nothing was returned.";
+		Zeny -= .@cost;
+		getitem .@id, .@n;
+		.@have -= .@n;
+		.@msg$ = "Withdrew " + .@n + " " + .@name$ + ".";
+	}
+	callsub S_Apply;
+	return "ok|" + .@have + "|" + Zeny + "|" + .@msg$;
+
+// S_Activate(combo) -> reply text
+S_Activate:
+	.@c = getarg(0);
+	if (.@c < 1 || .@c >= getarraysize(.comboCards$))
+		return "err|That is not a combo.";
+	if (!callsub(S_ComboMet, .@c))
+		return "err|Deposit all the required cards first.";
+	.@path$ = "client.a." + .@c;
+	if (modstore_get("account", .@path$, 0))
+		return "err|" + .comboName$[.@c] + " is already active.";
+	if (!modstore_set("account", .@path$, 1))
+		return "err|The collection could not be saved.";
+	callsub S_Apply;
+	return "ok|" + .comboName$[.@c] + " is now active.";
+
+// S_ComboMet(combo) -> 1 when the account has deposited enough of every card
+S_ComboMet:
+	explode(.@ids$, .comboCards$[getarg(0)], ",");
+	.@want = max(1, callfunc("F_ModSetting", "item-collection-ui", "combo_need", 3));
+	for (.@i = 0; .@i < getarraysize(.@ids$); .@i++) {
+		.@id = atoi(.@ids$[.@i]);
+		.@tier = $@ICUI_tier[.@id];
+		if (.@tier < 1)
+			return 0;
+		if (modstore_get("account", "client.c." + .@id, 0) < min(.@want, callsub(S_Need, .@tier)))
+			return 0;
+	}
+	return 1;
+
+// S_Need(tier) -> copies that complete a card of that tier
+S_Need:
+	switch (getarg(0)) {
+	case 3: return max(1, callfunc("F_ModSetting", "item-collection-ui", "need_mvp", 1));
+	case 2: return max(1, callfunc("F_ModSetting", "item-collection-ui", "need_boss", 3));
+	}
+	return max(1, callfunc("F_ModSetting", "item-collection-ui", "need_normal", 10));
+
+// S_Apply: bring this character's collection bonus up to date.
+S_Apply:
+	if (callfunc("F_ModSetting", "item-collection-ui", "bonuses", 1)) {
+		for (.@tier = 1; .@tier <= 3; .@tier++)
+			.@need[.@tier] = callsub(S_Need, .@tier);
+		freeloop(1);
+		.@k = modstore_keys("account", "client.c", .@ids$);
+		for (.@i = 0; .@i < .@k; .@i++) {
+			.@id = atoi(.@ids$[.@i]);
+			.@tier = $@ICUI_tier[.@id];
+			if (.@tier < 1)
+				continue;
+			if (modstore_get("account", "client.c." + .@id, 0) < .@need[.@tier])
+				continue;
+			.@c = $@ICUI_cat[.@id];
+			.@t[.kindA[.@c]] += .valueA[.@c] * .@tier;
+			if (.kindB[.@c] >= 0)
+				.@t[.kindB[.@c]] += .valueB[.@c] * .@tier;
+		}
+		for (.@c = 1; .@c < getarraysize(.comboCards$); .@c++) {
+			if (!modstore_get("account", "client.a." + .@c, 0) || !callsub(S_ComboMet, .@c))
+				continue;
+			deletearray .@gives$;
+			explode(.@gives$, .comboGives$[.@c], ",");
+			for (.@g = 0; .@g < getarraysize(.@gives$); .@g++) {
+				deletearray .@pair$;
+				explode(.@pair$, .@gives$[.@g], ":");
+				.@t[atoi(.@pair$[0])] += atoi(.@pair$[1]);
+			}
+		}
+		freeloop(0);
+	}
+	.@s$ = "";
+	for (.@j = 0; .@j < getarraysize(.bonus$); .@j++) {
+		.@d = .@t[.@j] - @icui_t[.@j];
+		if (.@d) {
+			.@s$ += "bonus " + .bonus$[.@j] + "," + .@d + ";";
+			@icui_t[.@j] = .@t[.@j];
+		}
+	}
+	if (.@s$ != "")
+		bonus_script "{" + .@s$ + "}", 2000000, 2568;
+	return;
+}

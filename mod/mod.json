@@ -1,0 +1,84 @@
+{
+  "name": "item-collection-ui",
+  "version": "1.2.0",
+  "author": "DaggerHashimoto",
+  "description": "A card collection window for your whole account. Deposit cards to complete them, activate themed combo sets, and every character on the account earns small permanent bonuses. Shows each card's real art, in a soft album-style window. Open it with the card icon in the Basic Info menu or @collection. Renewal and pre-renewal.",
+  "requires": {
+    "app": ">=1.7.4",
+    "era": "any"
+  },
+  "renewalFolder": "renewal",
+  "prerenewalFolder": "pre-renewal",
+  "settings": [
+    {
+      "key": "bonuses",
+      "type": "boolean",
+      "default": true,
+      "label": "Give collection bonuses",
+      "description": "Turn off to keep the collection without any stat bonus."
+    },
+    {
+      "key": "deposit_fee",
+      "type": "number",
+      "default": 1000,
+      "min": 0,
+      "max": 1000000,
+      "label": "Zeny fee per card deposited"
+    },
+    {
+      "key": "withdraw_fee",
+      "type": "number",
+      "default": 10000,
+      "min": 0,
+      "max": 1000000,
+      "label": "Zeny fee per card withdrawn"
+    },
+    {
+      "key": "need_normal",
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "label": "Copies to complete a normal card"
+    },
+    {
+      "key": "need_boss",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 100,
+      "label": "Copies to complete a boss card"
+    },
+    {
+      "key": "need_mvp",
+      "type": "number",
+      "default": 1,
+      "min": 1,
+      "max": 100,
+      "label": "Copies to complete an MVP card"
+    },
+    {
+      "key": "combo_need",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 100,
+      "label": "Copies of each card a combo needs",
+      "description": "A card that needs fewer to complete, like an MVP card, needs only that many."
+    },
+    {
+      "key": "show_support",
+      "type": "boolean",
+      "default": true,
+      "label": "Show the Support the author button",
+      "description": "A small button in the window that shares the author's Buy Me a Coffee link."
+    },
+    {
+      "key": "show_button",
+      "type": "boolean",
+      "default": true,
+      "label": "Show the card icon in the Basic Info menu",
+      "description": "The window still opens with @collection."
+    }
+  ]
+}
