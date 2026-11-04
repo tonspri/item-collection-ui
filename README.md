@@ -20,6 +20,8 @@ Each release is built by this repository's workflow from the commit it names, af
 - **Storage:** deposits are kept in the mod store's account scope, under `client.c.<card id>`. Activated combos are under `client.a.<combo id>`.
 - **Requests:** the window talks to a level-0 `@icui` command. Players can type that command themselves, so the script checks every request: the card must be on the list, and it checks the bag, Zeny and carrying weight itself.
 - **Bonuses:** each login applies the full total with one `bonus_script`. A change during a session adds only the difference. The flags make it end at logout and keep it safe from dispels, death and other scripts' `bonus_script_clear`.
+- **Where to find:** each era's table names the monsters that drop a card. The script asks the server for each one's live rate with `getmobdrops`, so drop-rate settings are included.
+- **Bulk deposit:** the window asks for the bag's cards with `bagall`, then sends at most 15 cards per `depm` request to stay under the client's request cap. The bonus changes once per request.
 - **Which cards:** every card a monster drops in that era's `mob_db`, from rAthena's tables. That is 449 in pre-renewal and 907 in renewal.
 - **Card art:** pictures are read from the player's own game files at run time. The mod ships only the file names, from the client's `num2cardillustnametable.txt`, and no card images.
 

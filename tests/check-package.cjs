@@ -99,6 +99,8 @@ function eraTable(folder) {
         const keys = Object.keys(rules.categoryLabels);
         for (const [folder, file, era] of [['renewal', 'cards-re.json', 'renewal'], ['pre-renewal', 'cards-pre.json', 'pre-renewal']]) {
             const { text, table } = eraTable(folder);
+            const mobs = new Map([...text.matchAll(/\$@ICUI_mobs\$\[(\d+)\] = "([\d,]+)";/g)].map(m => [Number(m[1]), m[2]]));
+            assert.equal(mobs.size, table.size, `${era}: every card names its monsters`);
             const cards = json(`client/${file}`);
             assert.equal(table.size, cards.length);
             assert(text.includes(`$@ICUI_era$ = "${era}";`));
@@ -109,6 +111,12 @@ function eraTable(folder) {
                 assert.equal(keys[row.cat], c.category);
             }
         }
+    });
+
+    await check('requests: where to find and bulk deposit reach the server script', () => {
+        for (const op of ['where', 'bagall', 'depm']) assert(code.includes(`.@op$ == "${op}"`), op);
+        for (const label of ['S_Where', 'S_BagAll', 'S_DepositMany']) assert(new RegExp(`^${label}:`, 'm').test(code), label);
+        assert(/if \(!\.@quiet\)\s+callsub S_Apply;/.test(code), 'a bulk deposit changes the bonus once, at the end');
     });
 
     await check('card art: every card names a picture, in the byte-per-character form', () => {
@@ -155,6 +163,17 @@ function eraTable(folder) {
         const named = [{ id: 7, name: 'Poring Card', category: 'armor' }, { id: 8, name: 'Lunatic Card', category: 'weapon' }];
         assert.equal(plugin.matchCards(named, { query: '  ' }, () => 'missing').length, 2);
         assert.equal(plugin.matchCards(named, { query: '8' }, () => 'missing')[0].id, 8);
+        assert.deepEqual(plugin.parseDrops(['1002~1~1~Poring', '1113~300~3~Drops', '', 'bad']).map(d => d.name), ['Drops', 'Poring']);
+        assert.equal(plugin.formatRate(1), '0.01%');
+        assert.equal(plugin.formatRate(100), '1%');
+        assert.equal(plugin.formatRate(150), '1.5%');
+        assert.deepEqual(plugin.parseBag('4001:12,4002:3,'), [[4001, 12], [4002, 3]]);
+        const pool = new Map([[1, { id: 1, tier: 'normal', name: 'B' }], [2, { id: 2, tier: 'mvp', name: 'A' }], [3, { id: 3, tier: 'normal', name: 'C' }]]);
+        assert.deepEqual(plugin.bulkRows([[1, 12], [2, 5], [3, 2], [9, 1]], pool, { 1: 4, 2: 1 }, need).map(r => [r.card.id, r.take]), [[1, 6], [3, 2]]);
+        const many = Array.from({ length: 31 }, (_, i) => ({ card: { id: 300000 + i }, take: 100 }));
+        const parts = plugin.bulkBatches(many);
+        assert.equal(parts.length, 3);
+        for (const part of parts) assert(`depm ${part}`.length <= 180, 'under the 200 character request cap');
         const byId = new Map([[1, { id: 1, tier: 'normal' }], [2, { id: 2, tier: 'mvp' }]]);
         const set = { id: 5, cards: [1, 2], gives: [[0, 4]] };
         assert.equal(plugin.comboState(set, byId, { 1: 2, 2: 1 }, {}, need, 3), 'incomplete');

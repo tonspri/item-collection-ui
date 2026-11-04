@@ -1,4 +1,4 @@
-# Item Collection UI v1.2.0
+# Item Collection UI v1.3.0
 
 A card collection window for your whole account. Deposit cards to complete them, activate themed combo sets, and every character on the account earns small permanent bonuses. Shows each card's real art, in a soft album-style window. Open it with the card icon in the Basic Info menu or @collection. Renewal and pre-renewal.
 
@@ -24,6 +24,9 @@ A completed card gives a bonus based on where it goes:
 - Accessory cards: HIT +1
 
 Boss cards give double and MVP cards triple.
+
+## Finding and depositing cards
+Pick a card and open **Where to find** to see which monsters drop it, with this server's real rates. **Bulk Deposit**, above the list, shows every card in your bag the collection still needs. Untick any you want to keep, check the total fee, and deposit them all at once.
 
 ## Combo Collections
 Open **Combos** to see 9 themed sets. Deposit 3 of each card in a set (an MVP card needs only 1), then click **Activate Bonus**. Combos use nothing up: your cards stay in your collection. If you withdraw a card and fall below what a set needs, its bonus pauses, and comes back when you deposit again.

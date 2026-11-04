@@ -1,4 +1,4 @@
-//===== Item Collection UI v1.2.0 ==========================================
+//===== Item Collection UI v1.3.0 ==========================================
 //= Server side of the Item Collection window (client/index.js).
 //= The collection is account-wide: deposited cards are kept in the mod
 //= store's account scope under client.c.<card id>, which the window reads.
@@ -9,6 +9,11 @@
 //=   @icui <n> dep <card> <amt>  -> ok|<deposited>|<zeny>|<message>
 //=   @icui <n> wd <card> <amt>   -> ok|<deposited>|<zeny>|<message>
 //=   @icui <n> act <combo>       -> ok|<message>
+//=   @icui <n> where <card>      -> ok|<mob>~<rate>~<level>~<name>|...
+//=   @icui <n> bagall            -> ok|<card>:<amount>,...
+//=   @icui <n> depm <card>:<amt>,...  -> ok|<zeny>|<refused>|<card>:<deposited>,...
+//= Rates are the server's own, read live (1 = 0.01%). The last three can be
+//= long, so their answers come in several @@reply parts.
 //= Anything refused answers err|<message>. Level 0, so every check is here.
 //=
 //= Combos only look at what is deposited and use nothing up. Activating sets
@@ -63,6 +68,14 @@ OnRequest:
 			.@out$ = "err|That is not a collectable card.";
 	} else if (.@op$ == "dep" || .@op$ == "wd") {
 		.@out$ = callsub(S_Move, .@op$, atoi(.@atcmd_parameters$[2]), atoi(.@atcmd_parameters$[3]));
+	} else if (.@op$ == "where") {
+		callsub S_Where, .@req, atoi(.@atcmd_parameters$[2]);
+		end;
+	} else if (.@op$ == "bagall") {
+		callsub S_BagAll, .@req;
+		end;
+	} else if (.@op$ == "depm") {
+		.@out$ = callsub(S_DepositMany, .@atcmd_parameters$[2]);
 	} else if (.@op$ == "act") {
 		.@out$ = callsub(S_Activate, atoi(.@atcmd_parameters$[2]));
 	} else {
@@ -71,11 +84,85 @@ OnRequest:
 	dispbottom "@@reply " + .@req + " 1/1 " + .@out$;
 	end;
 
-// S_Move("dep"|"wd", card id, amount) -> reply text
+// S_Where(request, card): each monster that drops the card, one reply part each.
+S_Where:
+	.@req = getarg(0);
+	.@id = getarg(1);
+	if ($@ICUI_tier[.@id] < 1) {
+		dispbottom "@@reply " + .@req + " 1/1 err|That is not a collectable card.";
+		return;
+	}
+	explode(.@mobs$, $@ICUI_mobs$[.@id], ",");
+	.@parts = 0;
+	for (.@i = 0; .@i < getarraysize(.@mobs$); .@i++) {
+		.@mob = atoi(.@mobs$[.@i]);
+		if (.@mob < 1 || getmonsterinfo(.@mob, MOB_LV) < 0 || !getmobdrops(.@mob))
+			continue;
+		for (.@d = 0; .@d < $@MobDrop_count; .@d++) {
+			if ($@MobDrop_item[.@d] != .@id)
+				continue;
+			.@line$[.@parts] = .@mob + "~" + $@MobDrop_rate[.@d] + "~" + getmonsterinfo(.@mob, MOB_LV) + "~" + getmonsterinfo(.@mob, MOB_NAME) + "|";
+			.@parts++;
+			break;
+		}
+	}
+	if (.@parts == 0) {
+		dispbottom "@@reply " + .@req + " 1/1 ok|";
+		return;
+	}
+	for (.@i = 0; .@i < .@parts; .@i++)
+		dispbottom "@@reply " + .@req + " " + (.@i + 1) + "/" + .@parts + " " + (.@i ? "" : "ok|") + .@line$[.@i];
+	return;
+
+// S_BagAll(request): every collectable card in this character's bag.
+S_BagAll:
+	.@req = getarg(0);
+	getinventorylist;
+	.@parts = 0;
+	.@inline = 0;
+	.@line$[0] = "";
+	for (.@i = 0; .@i < @inventorylist_count; .@i++) {
+		.@id = @inventorylist_id[.@i];
+		if ($@ICUI_tier[.@id] < 1)
+			continue;
+		if (.@inline == 15) {
+			.@parts++;
+			.@inline = 0;
+			.@line$[.@parts] = "";
+		}
+		.@line$[.@parts] += .@id + ":" + @inventorylist_amount[.@i] + ",";
+		.@inline++;
+	}
+	.@parts++;
+	for (.@i = 0; .@i < .@parts; .@i++)
+		dispbottom "@@reply " + .@req + " " + (.@i + 1) + "/" + .@parts + " " + (.@i ? "" : "ok|") + .@line$[.@i];
+	return;
+
+// S_DepositMany("card:amount,...") -> reply text. The bonus changes once, at the end.
+S_DepositMany:
+	explode(.@wants$, getarg(0), ",");
+	.@done$ = "";
+	.@refused = 0;
+	for (.@i = 0; .@i < getarraysize(.@wants$) && .@i < 20; .@i++) {
+		deletearray .@pair$;
+		explode(.@pair$, .@wants$[.@i], ":");
+		.@id = atoi(.@pair$[0]);
+		deletearray .@result$;
+		explode(.@result$, callsub(S_Move, "dep", .@id, atoi(.@pair$[1]), 1), "|");
+		if (.@result$[0] == "ok")
+			.@done$ += .@id + ":" + .@result$[1] + ",";
+		else
+			.@refused++;
+	}
+	callsub S_Apply;
+	return "ok|" + Zeny + "|" + .@refused + "|" + .@done$;
+
+// S_Move("dep"|"wd", card id, amount{, quiet}) -> reply text. Quiet leaves the bonus to the caller.
 S_Move:
 	.@op$ = getarg(0);
 	.@id = getarg(1);
 	.@n = getarg(2);
+	.@quiet = getarg(3, 0);
 	.@tier = $@ICUI_tier[.@id];
 	if (.@tier < 1 || getitemname(.@id) == "null")
 		return "err|That is not a collectable card.";
@@ -119,7 +206,8 @@ S_Move:
 		.@have -= .@n;
 		.@msg$ = "Withdrew " + .@n + " " + .@name$ + ".";
 	}
-	callsub S_Apply;
+	if (!.@quiet)
+		callsub S_Apply;
 	return "ok|" + .@have + "|" + Zeny + "|" + .@msg$;
 
 // S_Activate(combo) -> reply text

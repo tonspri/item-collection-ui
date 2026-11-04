@@ -1,4 +1,4 @@
-// Item Collection UI v1.2.0: an account-wide card collection window.
+// Item Collection UI v1.3.0: an account-wide card collection window.
 // Cards and rules ship beside this file (cards-re.json, cards-pre.json,
 // rules.json); what the account has deposited is read from the mod store
 // (client.c.<card id>), and every change goes through npc/item-collection.txt.
@@ -156,6 +156,31 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .need.met b { color: #2f8a3c; }
 .quiet { color: var(--soft); font-size: 11px; text-align: center; }
 .foot { display: flex; align-items: center; gap: 10px; }
+.views { display: flex; gap: 4px; }
+.views .pill { flex: 1; padding: 2px 4px; font-size: 11px; }
+.drops { max-height: 188px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
+.drop { display: flex; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 8px; font-size: 11px; animation: rise .2s ease backwards; }
+.drop:nth-child(odd) { background: rgba(255, 255, 255, .8); }
+.drop span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.drop small { flex: none; color: var(--soft); font-size: 10px; }
+.drop b { flex: none; color: var(--blue-deep); }
+.bulk { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(60, 70, 130, .35); animation: fade .15s ease; }
+.bulk-box { display: flex; flex-direction: column; gap: 8px; width: 500px; max-height: 480px; padding: 14px; background: #fffdf6; box-shadow: 0 12px 34px rgba(36, 44, 96, .45); }
+.bulk-box h3 { margin: 0; font-size: 14px; }
+.bulk-box p { margin: 0; color: var(--soft); font-size: 11px; }
+.bulk-list { flex: 1; min-height: 60px; overflow-y: auto; border: 1px solid var(--line); border-radius: 9px; background: #fff; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
+.bulk-row { display: flex; align-items: center; gap: 8px; padding: 4px 9px; cursor: pointer; transition: background .12s ease; }
+.bulk-row:hover { background: #e8effd; }
+.bulk-row input { flex: none; margin: 0; accent-color: var(--blue); }
+.bulk-row img { flex: none; width: 22px; height: 22px; image-rendering: pixelated; }
+.bulk-row .who { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bulk-row small { flex: none; color: var(--soft); font-size: 11px; }
+.bulk-row.full small { color: #8a5a12; font-weight: 600; }
+.bulk-sum { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
+.bulk-sum .short { color: #a83246; }
+.bulk-acts { display: flex; gap: 8px; }
+.bulk-acts .btn { width: auto; flex: 1; }
+.linky { padding: 0; border: 0; background: none; color: var(--blue-deep); font-size: 11px; cursor: pointer; text-decoration: underline; }
 .note { flex: 1; min-width: 0; padding: 0 2px; color: var(--soft); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coffee { flex: none; padding: 0 10px; line-height: 16px; border: 1px solid rgba(214, 160, 70, .6); border-radius: 11px; font-size: 11px; color: #8a5a12; background: linear-gradient(#fff6df, #fbe6bb); cursor: pointer; transition: transform .13s ease, box-shadow .13s ease, filter .13s ease; }
 .coffee:hover { transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 3px 8px rgba(190, 130, 40, .35); }
@@ -215,6 +240,42 @@ export function totalBonus(cards, counts, need, rules, active = {}, comboNeed = 
 
 export const describeBonus = (bonus, rules) => bonus.map(({ kind, value }) => `${rules.kinds[kind].label} +${value}`).join(', ');
 
+/** A 'where' reply's fields, highest rate first. */
+export function parseDrops(fields) {
+    return fields.map(field => {
+        const [mob, rate, level, ...name] = String(field).split('~');
+        return { mob: Number(mob), rate: Number(rate), level: Number(level), name: name.join('~') };
+    }).filter(drop => drop.mob > 0 && drop.name).sort((a, b) => b.rate - a.rate || a.level - b.level);
+}
+
+/** A server drop rate as a percentage: 1 is 0.01%. */
+export const formatRate = rate => `${(rate / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
+
+/** A 'bagall' reply as [[card id, amount]]. */
+export function parseBag(text) {
+    return String(text).split(',').map(part => part.split(':').map(Number)).filter(([id, amount]) => id > 0 && amount > 0);
+}
+
+/** What a bulk deposit can take: each card in the bag that still needs copies, and how many. */
+export function bulkRows(bag, byId, counts, need) {
+    const rows = [];
+    for (const [id, amount] of bag) {
+        const card = byId.get(id);
+        if (!card) continue;
+        const room = need[card.tier] - (counts[id] || 0);
+        if (room > 0) rows.push({ card, take: Math.min(room, amount), have: counts[id] || 0, full: need[card.tier] });
+    }
+    return rows.sort((a, b) => a.card.name.localeCompare(b.card.name));
+}
+
+/** Requests of at most `size` cards each, so none passes the client's 200 character cap. */
+export function bulkBatches(rows, size = 15) {
+    const out = [];
+    for (let i = 0; i < rows.length; i += size)
+        out.push(rows.slice(i, i + size).map(row => `${row.card.id}:${row.take}`).join(','));
+    return out;
+}
+
 /** The cards a view shows: state is 'all' or a card state, slot 'all' or a category. */
 export function matchCards(cards, { state = 'all', slot = 'all', query = '' }, stateOf) {
     const q = query.trim().toLowerCase();
@@ -273,6 +334,8 @@ export default function init(parameters, api) {
     let busy = false;
     let loading = null;
     let notice = null;
+    let detailView = 'collect';
+    const dropCache = new Map();
     const bags = new Map();
     const pictures = new Map();
 
@@ -409,12 +472,13 @@ export default function init(parameters, api) {
 
     function renderGrid() {
         left.innerHTML = `<div class="filters">${[['all', 'All'], ['missing', 'Missing'], ['partial', 'Partial'], ['done', 'Completed']]
-            .map(([key, label]) => `<button class="pill${state === key ? ' on' : ''}" data-state="${key}">${label}</button>`).join('')}<span class="shown"></span></div><div class="grid"></div>`;
+            .map(([key, label]) => `<button class="pill${state === key ? ' on' : ''}" data-state="${key}">${label}</button>`).join('')}<span class="shown"></span><button class="pill" data-bulk title="Deposit many cards from your bag at once">Bulk Deposit</button></div><div class="grid"></div>`;
         const grid = left.querySelector('.grid');
         const shown = matchCards(cards, { state, slot, query }, stateOf);
         left.querySelector('.shown').textContent = `${shown.length} card${shown.length === 1 ? '' : 's'}`;
         grid.innerHTML = shown.length ? shown.map(tileHtml).join('') : `<div class="empty">No cards match${query ? ` "${escape(query)}"` : ' this filter'}.</div>`;
         left.querySelectorAll('[data-state]').forEach(b => b.addEventListener('click', () => { state = b.dataset.state; renderGrid(); }));
+        left.querySelector('[data-bulk]').addEventListener('click', openBulk);
         grid.addEventListener('click', event => {
             const tile = event.target.closest('.tile');
             if (tile) select(Number(tile.dataset.id));
@@ -464,19 +528,130 @@ export default function init(parameters, api) {
             <div class="rarity"><b>${gems}</b> ${rarity} · ${escape(slotLabel(card.category))}</div>
             <div class="prog ${n >= full ? 'done' : ''}"><i style="width:${(100 * n / full).toFixed(0)}%"></i><span>${n} / ${full} deposited</span></div>
             <div class="sub"><span>ID ${card.id}</span><span class="bag">In bag: ${bag}</span></div>
-            <h4>Collection bonus</h4><div class="gain${bonusesOn ? '' : ' off'}">${bonusesOn ? escape(describeBonus(cardBonus(card, rules), rules)) : 'Bonuses are off in Settings'}</div>
-            <h4>Each card costs</h4><div class="sub"><span>Deposit ${commas(fee.deposit)}z</span><span>Withdraw ${commas(fee.withdraw)}z</span></div>
+            <div class="views"><button class="pill${detailView === 'collect' ? ' on' : ''}" data-view="collect">Collect</button><button class="pill${detailView === 'find' ? ' on' : ''}" data-view="find">Where to find</button></div>
+            ${detailView === 'find' ? `<h4>Dropped by</h4><div class="drops"><div class="quiet">Asking the server…</div></div><div class="quiet">Rates on this server.</div>` : `<h4>Collection bonus</h4><div class="gain${bonusesOn ? '' : ' off'}">${bonusesOn ? escape(describeBonus(cardBonus(card, rules), rules)) : 'Bonuses are off in Settings'}</div>
+            <div class="sub" title="Zeny fee per card"><span>Deposit ${commas(fee.deposit)}z each</span><span>Withdraw ${commas(fee.withdraw)}z</span></div>
             <div class="qty"><button class="step" data-step="-1" aria-label="One fewer">&minus;</button><input type="number" min="1" max="${full}" value="1" aria-label="How many"><button class="step" data-step="1" aria-label="One more">+</button></div>
             <div class="pair"><button class="btn" data-op="dep"${n >= full ? ' disabled' : ''}>Deposit</button>
             <button class="btn alt" data-op="all"${n >= full ? ' disabled' : ''}>Deposit All</button></div>
-            <button class="btn warm" data-op="wd"${n < 1 ? ' disabled' : ''}>Withdraw</button>
+            <button class="btn warm" data-op="wd"${n < 1 ? ' disabled' : ''}>Withdraw</button>`}
             <div class="msg${notice?.error ? ' err' : ''}">${escape(notice?.text || '')}</div></div>`;
         showPicture(right.querySelector('.art img'), card);
+        right.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { detailView = b.dataset.view; notice = null; renderDetail(); }));
+        refreshBag(card.id);
+        if (detailView === 'find') { showDrops(card); return; }
         const amountBox = right.querySelector('input');
         const amount = () => whole(Math.trunc(Number(amountBox.value)), 1, 1, full);
         right.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => { amountBox.value = whole(amount() + Number(b.dataset.step), 1, 1, full); }));
         right.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => move(card, b, b.dataset.op === 'all' ? full : amount())));
-        refreshBag(card.id);
+    }
+
+    // Rates only change when the server restarts, so a card is asked about once per page.
+    async function showDrops(card) {
+        if (!dropCache.has(card.id)) {
+            const reply = await ask(`where ${card.id}`);
+            if (!reply.ok) {
+                const box = right.querySelector('.drops');
+                if (box && selected === card.id) box.innerHTML = `<div class="quiet">${escape(reply.message)}</div>`;
+                return;
+            }
+            dropCache.set(card.id, parseDrops(reply.fields));
+        }
+        const box = right.querySelector('.drops');
+        if (!box || selected !== card.id || detailView !== 'find') return;
+        const drops = dropCache.get(card.id);
+        box.innerHTML = drops.length ? drops.map((drop, i) => `<div class="drop" style="animation-delay:${Math.min(i, 8) * 25}ms" title="${escape(drop.name)}"><span>${escape(drop.name)}</span><small>Lv ${drop.level}</small><b>${formatRate(drop.rate)}</b></div>`).join('')
+            : '<div class="quiet">No monster on this server drops this card.</div>';
+    }
+
+    // Bulk deposit: a list to confirm, in its own layer over the window.
+    function closeBulk() { $('.bulk')?.remove(); }
+
+    async function openBulk() {
+        if (busy) return;
+        closeBulk();
+        const reply = await ask('bagall');
+        if (!reply.ok) { showBulk(`<h3>Bulk Deposit</h3><p>${escape(reply.message)}</p><div class="bulk-acts"><button class="btn alt" data-close>Close</button></div>`); return; }
+        drawBulk(bulkRows(parseBag(reply.fields.join('|')), byId, counts, need));
+    }
+
+    function showBulk(html) {
+        closeBulk();
+        const layer = document.createElement('div');
+        layer.className = 'bulk';
+        layer.innerHTML = `<div class="glass bulk-box">${html}</div>`;
+        $('.root').append(layer);
+        layer.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeBulk));
+        return layer;
+    }
+
+    function drawBulk(rows) {
+        if (!rows.length) {
+            showBulk('<h3>Bulk Deposit</h3><p>Nothing to deposit: your bag has no cards your collection still needs.</p><div class="bulk-acts"><button class="btn alt" data-close>Close</button></div>');
+            return;
+        }
+        const layer = showBulk(`<h3>Bulk Deposit</h3><p>Untick any card you want to keep, for slotting or selling. Only what each card still needs is taken.</p>
+            <div class="bulk-sum"><button class="linky" data-all>Untick all</button></div>
+            <div class="bulk-list">${rows.map((row, i) => `<label class="bulk-row${row.have + row.take >= row.full ? ' full' : ''}"><input type="checkbox" checked data-row="${i}"><img data-icon="${row.card.id}" alt=""><span class="who">${escape(row.card.name)}</span><small>+${row.take} \u2192 ${row.have + row.take} / ${row.full}</small></label>`).join('')}</div>
+            <div class="bulk-sum"><span class="sum"></span><span class="short"></span></div>
+            <div class="bulk-acts"><button class="btn alt" data-close>Cancel</button><button class="btn" data-go>Deposit</button></div>`);
+        layer.querySelectorAll('img[data-icon]').forEach(img => Promise.resolve(api.items.icon(Number(img.dataset.icon))).then(url => { if (url) img.src = url; }, () => {}));
+        const boxes = [...layer.querySelectorAll('input[data-row]')];
+        const go = layer.querySelector('[data-go]');
+        const chosen = () => boxes.filter(box => box.checked).map(box => rows[Number(box.dataset.row)]);
+        const update = () => {
+            const picked = chosen();
+            const copies = picked.reduce((sum, row) => sum + row.take, 0);
+            const cost = copies * fee.deposit;
+            layer.querySelector('.sum').textContent = `${copies} card${copies === 1 ? '' : 's'} for ${commas(cost)} Zeny`;
+            layer.querySelector('.short').textContent = cost > zeny ? `You have ${commas(zeny)} Zeny` : '';
+            layer.querySelector('[data-all]').textContent = picked.length ? 'Untick all' : 'Tick all';
+            go.disabled = !copies || cost > zeny;
+        };
+        boxes.forEach(box => box.addEventListener('change', update));
+        layer.querySelector('[data-all]').addEventListener('click', () => { const on = !chosen().length; boxes.forEach(box => { box.checked = on; }); update(); });
+        go.addEventListener('click', () => runBulk(chosen(), layer));
+        update();
+    }
+
+    async function runBulk(rows, layer) {
+        if (busy) return;
+        busy = true;
+        const before = new Map(rows.map(row => [row.card.id, stateOf(row.card)]));
+        const was = zeny;
+        const start = rows.map(row => counts[row.card.id] || 0);
+        layer.querySelector('.bulk-box').innerHTML = '<h3>Bulk Deposit</h3><p class="progress">Depositing…</p>';
+        const line = layer.querySelector('.progress');
+        const batches = bulkBatches(rows);
+        let refused = 0;
+        let failed = false;
+        for (let i = 0; i < batches.length; i++) {
+            line.textContent = `Depositing, part ${i + 1} of ${batches.length}…`;
+            const reply = await ask(`depm ${batches[i]}`);
+            if (!reply.ok) { failed = true; break; }
+            zeny = Number(reply.fields[0]) || 0;
+            refused += Number(reply.fields[1]) || 0;
+            for (const [id, have] of parseBag(reply.fields[2] || '')) counts[id] = have;
+        }
+        busy = false;
+        const moved = rows.reduce((sum, row, i) => sum + (counts[row.card.id] || 0) - start[i], 0);
+        const finished = rows.filter(row => before.get(row.card.id) !== 'done' && stateOf(row.card) === 'done');
+        bags.clear();
+        renderHead(finished.length > 0);
+        renderRail();
+        if (tab === 'cards') {
+            const scroll = left.querySelector('.grid')?.scrollTop || 0;
+            renderGrid();
+            const grid = left.querySelector('.grid');
+            if (grid) grid.scrollTop = scroll;
+            for (const row of finished) updateTile(row.card, true);
+            renderDetail();
+        }
+        const lines = [`Deposited ${moved} card${moved === 1 ? '' : 's'} for ${commas(was - zeny)} Zeny.`];
+        if (finished.length) lines.push(`${finished.length} card${finished.length === 1 ? '' : 's'} completed!`);
+        if (refused) lines.push(`${refused} could not be deposited. Check your bag and Zeny.`);
+        if (failed) lines.push('The server stopped answering, so the rest were not deposited. Nothing was lost.');
+        showBulk(`<h3>Bulk Deposit</h3>${lines.map(text => `<p>${escape(text)}</p>`).join('')}<div class="bulk-acts"><button class="btn" data-close>Done</button></div>`);
     }
 
     async function move(card, button, amount) {
@@ -665,6 +840,7 @@ export default function init(parameters, api) {
     api.cleanup(() => clearTimeout(typing));
 
     function open() {
+        closeBulk();
         win.show();
         // Read the account again on every open: another character may have changed it.
         refresh();
