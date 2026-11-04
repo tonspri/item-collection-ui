@@ -1,4 +1,4 @@
-//===== Item Collection UI v1.3.0 ==========================================
+//===== Item Collection UI v1.3.1 ==========================================
 //= Server side of the Item Collection window (client/index.js).
 //= The collection is account-wide: deposited cards are kept in the mod
 //= store's account scope under client.c.<card id>, which the window reads.

@@ -1,4 +1,4 @@
-// Item Collection UI v1.3.0: an account-wide card collection window.
+// Item Collection UI v1.3.1: an account-wide card collection window.
 // Cards and rules ship beside this file (cards-re.json, cards-pre.json,
 // rules.json); what the account has deposited is read from the mod store
 // (client.c.<card id>), and every change goes through npc/item-collection.txt.
@@ -15,6 +15,7 @@ const FRAME_STYLE = `
 .close:hover { background: #ef7f8f; transform: scale(1.12); }
 .close:active { transform: scale(.92); }
 .body { overflow: hidden; }
+@container style(--ro-game-cursor: on) { * { cursor: none !important; } }
 `;
 
 const STYLE = `
@@ -86,7 +87,7 @@ button { font: inherit; color: inherit; }
 .tile.done .badge::after { content: '\\2713'; }
 .tile.missing .badge { background: rgba(60, 60, 90, .75); }
 .tile.missing .badge::after { content: ''; position: absolute; left: 5px; top: 7px; width: 6px; height: 5px; border-radius: 1px; background: #fff; }
-.tile.missing .badge::before { content: ''; position: absolute; left: 6px; top: 4px; width: 4px; height: 4px; border: 1px solid #fff; border-bottom: 0; border-radius: 3px 3px 0 0; }
+.tile.missing .badge::before { content: ''; position: absolute; left: 5px; top: 4px; width: 4px; height: 4px; border: 1px solid #fff; border-bottom: 0; border-radius: 3px 3px 0 0; }
 .tile .name { margin-top: 3px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .prog { position: relative; height: 13px; margin-top: 2px; border-radius: 7px; background: rgba(120, 138, 205, .22); overflow: hidden; text-align: center; font-size: 10px; line-height: 13px; }
 .prog i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 7px; background: linear-gradient(90deg, #8fb3f2, var(--blue)); transition: width .4s cubic-bezier(.2, .8, .2, 1); }
@@ -94,9 +95,16 @@ button { font: inherit; color: inherit; }
 .prog span { position: relative; font-weight: 600; }
 .tile.celebrate { animation: celebrate .7s cubic-bezier(.2, .9, .3, 1.3); }
 
-.right { width: 214px; display: flex; flex-direction: column; padding: 10px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
+.right { width: 214px; display: flex; flex-direction: column; min-height: 0; padding: 10px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
 .detail { display: flex; flex-direction: column; gap: 5px; animation: fade .2s ease; }
+.card-detail { flex: 1; min-height: 0; }
+.info { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; padding-right: 2px; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
+.info > * { flex: none; }
+.actions { flex: none; display: flex; flex-direction: column; gap: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
 .detail h3 { margin: 0; font-size: 13px; text-align: center; }
+.detail .art[data-zoom] { cursor: zoom-in; transition: transform .14s ease; }
+.detail .art[data-zoom]:hover { transform: scale(1.03); }
+.info.finding .art { width: 66px; }
 .detail .art { width: 106px; margin: 0 auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(60, 70, 150, .35); }
 .rarity { text-align: center; color: var(--soft); font-size: 11px; }
 .rarity b { color: var(--gold); letter-spacing: 1px; font-weight: 400; }
@@ -158,7 +166,6 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .foot { display: flex; align-items: center; gap: 10px; }
 .views { display: flex; gap: 4px; }
 .views .pill { flex: 1; padding: 2px 4px; font-size: 11px; }
-.drops { max-height: 188px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #a9b8e6 transparent; }
 .drop { display: flex; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 8px; font-size: 11px; animation: rise .2s ease backwards; }
 .drop:nth-child(odd) { background: rgba(255, 255, 255, .8); }
 .drop span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -181,6 +188,16 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .bulk-acts { display: flex; gap: 8px; }
 .bulk-acts .btn { width: auto; flex: 1; }
 .linky { padding: 0; border: 0; background: none; color: var(--blue-deep); font-size: 11px; cursor: pointer; text-decoration: underline; }
+.zoom { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(40, 46, 96, .6); cursor: zoom-out; animation: fade .15s ease; }
+.zoom img { width: 300px; height: 400px; border-radius: 12px; box-shadow: 0 12px 34px rgba(20, 24, 70, .6); }
+.zoom span { padding: 2px 12px; border-radius: 10px; color: #fff; font-weight: 600; background: rgba(40, 46, 96, .7); }
+.gear { flex: none; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #fff; cursor: pointer; font-size: 14px; line-height: 20px; transition: transform .14s ease, background .14s ease; }
+.gear:hover { background: #e8effd; transform: rotate(30deg); }
+.gear:active { transform: scale(.9); }
+.options { position: absolute; right: 12px; top: 44px; z-index: 4; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; background: #fffdf6; box-shadow: 0 8px 22px rgba(36, 44, 96, .35); animation: fade .15s ease; }
+.options b { margin-bottom: 2px; }
+.options label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.options input { margin: 0; accent-color: var(--blue); }
 .note { flex: 1; min-width: 0; padding: 0 2px; color: var(--soft); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coffee { flex: none; padding: 0 10px; line-height: 16px; border: 1px solid rgba(214, 160, 70, .6); border-radius: 11px; font-size: 11px; color: #8a5a12; background: linear-gradient(#fff6df, #fbe6bb); cursor: pointer; transition: transform .13s ease, box-shadow .13s ease, filter .13s ease; }
 .coffee:hover { transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 3px 8px rgba(190, 130, 40, .35); }
@@ -308,7 +325,7 @@ export default function init(parameters, api) {
     }
     body.innerHTML = `<style>${STYLE}</style><div class="root">
         <div class="glass head"><span class="count">Collected <b>0</b> / <span class="all">0</span></span><div class="bar"><i></i></div><span class="zeny">0</span>
-            <label class="search"><input placeholder="Search card name or ID" maxlength="40" aria-label="Search cards"><button class="clear" type="button" title="Clear search" hidden>&times;</button></label></div>
+            <label class="search"><input placeholder="Search card name or ID" maxlength="40" aria-label="Search cards"><button class="clear" type="button" title="Clear search" hidden>&times;</button></label><button class="gear" title="Display options" aria-label="Display options">\u2699</button></div>
         <div class="main"><div class="rail"></div><div class="glass left"></div><div class="glass right"></div></div>
         <div class="foot"><div class="note">Item Collection is account-wide: every character on this account shares it. Renewal and pre-renewal each keep their own.</div>${parameters?.show_support !== false ? '<button class="coffee" title="Buy DaggerHashimoto a coffee">\u2615 Support the author</button>' : ''}</div></div>`;
     const $ = selector => body.querySelector(selector);
@@ -334,6 +351,11 @@ export default function init(parameters, api) {
     let busy = false;
     let loading = null;
     let notice = null;
+    // Per player, so they need no restart. Missing or unreadable means the default.
+    const SHOW = [['fees', 'Show fees'], ['itemId', 'Show item ID'], ['bag', 'Show bag count']];
+    let shown = {};
+    try { shown = api.preferences?.get('display', {}) || {}; } catch {}
+    const showing = key => shown[key] !== false;
     let detailView = 'collect';
     const dropCache = new Map();
     const bags = new Map();
@@ -523,27 +545,62 @@ export default function init(parameters, api) {
         const full = needOf(card);
         const [rarity, gems] = RARITY[card.tier];
         const bag = bags.has(card.id) ? commas(bags.get(card.id)) : '…';
-        right.innerHTML = `<div class="detail"><h3>${escape(card.name)}</h3>
-            <div class="art"><img alt=""></div>
+        const scroll = right.querySelector('.info')?.scrollTop || 0;
+        const sub = [showing('itemId') ? `<span>ID ${card.id}</span>` : '', showing('bag') ? `<span class="bag">In bag: ${bag}</span>` : ''].join('');
+        right.innerHTML = `<div class="detail card-detail"><h3>${escape(card.name)}</h3>
+            <div class="info${detailView === 'find' ? ' finding' : ''}">
+            <div class="art" data-zoom title="Click to enlarge"><img alt=""></div>
             <div class="rarity"><b>${gems}</b> ${rarity} · ${escape(slotLabel(card.category))}</div>
             <div class="prog ${n >= full ? 'done' : ''}"><i style="width:${(100 * n / full).toFixed(0)}%"></i><span>${n} / ${full} deposited</span></div>
-            <div class="sub"><span>ID ${card.id}</span><span class="bag">In bag: ${bag}</span></div>
+            ${sub ? `<div class="sub">${sub}</div>` : ''}
             <div class="views"><button class="pill${detailView === 'collect' ? ' on' : ''}" data-view="collect">Collect</button><button class="pill${detailView === 'find' ? ' on' : ''}" data-view="find">Where to find</button></div>
-            ${detailView === 'find' ? `<h4>Dropped by</h4><div class="drops"><div class="quiet">Asking the server…</div></div><div class="quiet">Rates on this server.</div>` : `<h4>Collection bonus</h4><div class="gain${bonusesOn ? '' : ' off'}">${bonusesOn ? escape(describeBonus(cardBonus(card, rules), rules)) : 'Bonuses are off in Settings'}</div>
-            <div class="sub" title="Zeny fee per card"><span>Deposit ${commas(fee.deposit)}z each</span><span>Withdraw ${commas(fee.withdraw)}z</span></div>
+            ${detailView === 'find' ? `<h4>Dropped by</h4><div class="drops"><div class="quiet">Asking the server…</div></div><div class="quiet">Rates on this server.</div>` : `<h4>Collection bonus</h4><div class="gain${bonusesOn ? '' : ' off'}">${bonusesOn ? escape(describeBonus(cardBonus(card, rules), rules)) : 'Bonuses are off in Settings'}</div>`}
+            </div>
+            <div class="actions">
+            ${showing('fees') ? `<div class="sub" title="Zeny fee per card"><span>Deposit ${commas(fee.deposit)}z each</span><span>Withdraw ${commas(fee.withdraw)}z</span></div>` : ''}
             <div class="qty"><button class="step" data-step="-1" aria-label="One fewer">&minus;</button><input type="number" min="1" max="${full}" value="1" aria-label="How many"><button class="step" data-step="1" aria-label="One more">+</button></div>
             <div class="pair"><button class="btn" data-op="dep"${n >= full ? ' disabled' : ''}>Deposit</button>
             <button class="btn alt" data-op="all"${n >= full ? ' disabled' : ''}>Deposit All</button></div>
-            <button class="btn warm" data-op="wd"${n < 1 ? ' disabled' : ''}>Withdraw</button>`}
-            <div class="msg${notice?.error ? ' err' : ''}">${escape(notice?.text || '')}</div></div>`;
+            <button class="btn warm" data-op="wd"${n < 1 ? ' disabled' : ''}>Withdraw</button>
+            <div class="msg${notice?.error ? ' err' : ''}">${escape(notice?.text || '')}</div></div></div>`;
+        right.querySelector('.info').scrollTop = scroll;
         showPicture(right.querySelector('.art img'), card);
+        right.querySelector('[data-zoom]').addEventListener('click', () => zoomCard(card));
         right.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { detailView = b.dataset.view; notice = null; renderDetail(); }));
-        refreshBag(card.id);
-        if (detailView === 'find') { showDrops(card); return; }
+        if (showing('bag')) refreshBag(card.id);
+        if (detailView === 'find') showDrops(card);
         const amountBox = right.querySelector('input');
         const amount = () => whole(Math.trunc(Number(amountBox.value)), 1, 1, full);
         right.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => { amountBox.value = whole(amount() + Number(b.dataset.step), 1, 1, full); }));
         right.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => move(card, b, b.dataset.op === 'all' ? full : amount())));
+    }
+
+    // The card at its full size, over the window. Any click closes it.
+    async function zoomCard(card) {
+        const found = await picture(card);
+        if (!found || found.icon || selected !== card.id) return;
+        closeZoom();
+        const layer = document.createElement('div');
+        layer.className = 'zoom';
+        layer.innerHTML = `<img alt=""><span>${escape(card.name)}</span>`;
+        layer.querySelector('img').src = found.url;
+        layer.addEventListener('click', closeZoom);
+        $('.root').append(layer);
+    }
+    function closeZoom() { $('.zoom')?.remove(); }
+
+    function toggleOptions() {
+        const open = $('.options');
+        if (open) { open.remove(); return; }
+        const menu = document.createElement('div');
+        menu.className = 'glass options';
+        menu.innerHTML = `<b>Display</b>${SHOW.map(([key, label]) => `<label><input type="checkbox" data-show="${key}"${showing(key) ? ' checked' : ''}>${label}</label>`).join('')}`;
+        menu.querySelectorAll('[data-show]').forEach(box => box.addEventListener('change', () => {
+            shown = { ...shown, [box.dataset.show]: box.checked };
+            try { api.preferences?.set('display', shown); } catch {}
+            if (tab === 'cards') renderDetail();
+        }));
+        $('.root').append(menu);
     }
 
     // Rates only change when the server restarts, so a card is asked about once per page.
@@ -813,6 +870,11 @@ export default function init(parameters, api) {
     });
     api.cleanup(() => clearTimeout(supportReset));
 
+    $('.gear').addEventListener('click', toggleOptions);
+    $('.root').addEventListener('pointerdown', event => {
+        if (!event.target.closest('.options, .gear')) $('.options')?.remove();
+    });
+
     // A soft ripple where any button is pressed.
     $('.root').addEventListener('pointerdown', event => {
         const button = event.target.closest('.btn:not(:disabled)');
@@ -841,6 +903,7 @@ export default function init(parameters, api) {
 
     function open() {
         closeBulk();
+        closeZoom();
         win.show();
         // Read the account again on every open: another character may have changed it.
         refresh();
@@ -901,7 +964,8 @@ export default function init(parameters, api) {
               border: 1px solid #fff; border-radius: 11px; background: linear-gradient(#6d97ee, #3559bd); box-shadow: 0 2px 5px rgba(30, 40, 110, .5); transition: transform .13s ease, filter .13s ease; }
             button:hover { transform: translateY(-1px) scale(1.06); filter: brightness(1.1); }
             button:active { transform: scale(.94); }
-            button.ingame { display: block; }</style><button title="Item Collection">Cards</button>`;
+            button.ingame { display: block; }
+            @container style(--ro-game-cursor: on) { * { cursor: none !important; } }</style><button title="Item Collection">Cards</button>`;
         launcher = root.querySelector('button');
         showLauncher();
         launcher.addEventListener('click', event => { event.stopPropagation(); toggle(); });

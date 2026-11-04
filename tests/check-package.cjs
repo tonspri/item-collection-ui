@@ -119,6 +119,12 @@ function eraTable(folder) {
         assert(/if \(!\.@quiet\)\s+callsub S_Apply;/.test(code), 'a bulk deposit changes the bonus once, at the end');
     });
 
+    await check('window: hides the system pointer with the game cursor, and keeps the lock icon centered', () => {
+        const client = read('client/index.js');
+        assert((client.match(/@container style\(--ro-game-cursor: on\) \{ \* \{ cursor: none !important; \} \}/g) || []).length >= 2, 'window and fallback button');
+        assert(client.includes('.tile.missing .badge::before { content: \'\'; position: absolute; left: 5px;'));
+    });
+
     await check('card art: every card names a picture, in the byte-per-character form', () => {
         for (const file of ['cards-re.json', 'cards-pre.json'])
             for (const c of json(`client/${file}`)) {
