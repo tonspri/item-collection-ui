@@ -1,4 +1,4 @@
-// Item Collection UI v1.4.0: an account-wide card collection window.
+// Item Collection UI v1.5.0: an account-wide card collection window.
 // Cards and rules ship beside this file (cards-re.json, cards-pre.json,
 // rules.json); what the account has deposited is read from the mod store
 // (client.c.<card id>), and every change goes through npc/item-collection.txt.
@@ -32,7 +32,7 @@ button { font: inherit; color: inherit; }
 .count { font-weight: 600; white-space: nowrap; }
 .count b { color: var(--blue-deep); display: inline-block; }
 .count b.bump { animation: bump .45s ease; }
-.bar { flex: 1; height: 9px; border-radius: 6px; background: rgba(120, 138, 205, .22); overflow: hidden; }
+.bar { position: relative; flex: 1; height: 9px; border-radius: 6px; background: rgba(120, 138, 205, .22); }
 .bar i { display: block; height: 100%; width: 0; border-radius: 6px; background: linear-gradient(90deg, #f6cf68, var(--gold)); transition: width .5s cubic-bezier(.2, .8, .2, 1); }
 .search { display: flex; align-items: center; width: 210px; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; }
 .search:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79, 127, 224, .2); }
@@ -219,6 +219,15 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .set-acts { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
 .bulk-row.drop-below small { color: #a83246; font-weight: 600; }
 @keyframes inbag { 50% { box-shadow: 0 0 0 2px #6fcf73, 0 0 16px rgba(111, 207, 115, 1); } }
+.bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 1px; background: #a9b4d8; }
+.bar u.got { background: var(--gold); box-shadow: 0 0 4px var(--gold); }
+.row.mile { align-items: flex-start; }
+.row.mile span { flex: 1; min-width: 0; }
+.row.mile b { flex: none; white-space: nowrap; }
+.row.mile:not(.got) { color: var(--soft); }
+.row.mile:not(.got)::before { background: #c5cbe0; }
+.row.mile.got { background: linear-gradient(100deg, #fff8e4, #fff); }
+.totals h4 + .empty { padding: 8px; }
 .note { flex: 1; min-width: 0; padding: 0 2px; color: var(--soft); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coffee { flex: none; padding: 0 10px; line-height: 16px; border: 1px solid rgba(214, 160, 70, .6); border-radius: 11px; font-size: 11px; color: #8a5a12; background: linear-gradient(#fff6df, #fbe6bb); cursor: pointer; transition: transform .13s ease, box-shadow .13s ease, filter .13s ease; }
 .coffee:hover { transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 3px 8px rgba(190, 130, 40, .35); }
@@ -263,8 +272,14 @@ export function comboState(combo, byId, counts, active, need, comboNeed) {
     return !met ? 'incomplete' : active[combo.id] ? 'active' : 'ready';
 }
 
-/** Every completed card's bonus and every active combo's added up, in rules.kinds order. */
-export function totalBonus(cards, counts, need, rules, active = {}, comboNeed = 3) {
+/** How many cards are complete, and the milestones that reaches. */
+export function milestonesReached(cards, counts, need, rules) {
+    const done = cards.filter(card => (counts[card.id] || 0) >= need[card.tier]).length;
+    return (rules.milestones || []).filter(goal => cards.length && done * 100 >= goal.pct * cards.length);
+}
+
+/** Every completed card's bonus and every active combo's added up, in rules.kinds order. Milestones only when asked for. */
+export function totalBonus(cards, counts, need, rules, active = {}, comboNeed = 3, withMilestones = false) {
     const total = rules.kinds.map(() => 0);
     for (const card of cards)
         if ((counts[card.id] || 0) >= need[card.tier])
@@ -273,6 +288,9 @@ export function totalBonus(cards, counts, need, rules, active = {}, comboNeed = 
     for (const combo of rules.combos || [])
         if (comboState(combo, byId, counts, active, need, comboNeed) === 'active')
             for (const [kind, value] of combo.gives) total[kind] += value;
+    if (withMilestones)
+        for (const goal of milestonesReached(cards, counts, need, rules))
+            for (const [kind, value] of goal.gives) total[kind] += value;
     return total;
 }
 
@@ -328,6 +346,11 @@ export function bulkBatches(rows, size = 15, longest = 170) {
 
 /** The most copies of one card the collection holds when it may keep extras. */
 export const STORE_CAP = 9999;
+
+/** The item id in the client's ItemObtain popup, from its icon's class, or 0. */
+export function obtainedItem(box) {
+    return Number(box.querySelector?.('img[class*="item-"]')?.className.match(/item-(\d+)/)?.[1]) || 0;
+}
 
 /** The cards a view shows: state is 'all' or a card state, slot 'all' or a category. */
 export function matchCards(cards, { state = 'all', slot = 'all', query = '', by = 'name', hiddenTiers = [] }, stateOf, bonusText = () => '') {
@@ -396,7 +419,7 @@ export default function init(parameters, api) {
     let loading = null;
     let notice = null;
     // Per player, so they need no restart. Missing or unreadable means the default.
-    const SHOW = [['fees', 'Show fees'], ['itemId', 'Show item ID'], ['bag', 'Show bag count']];
+    const SHOW = [['fees', 'Show fees'], ['itemId', 'Show item ID'], ['bag', 'Show bag count'], ['alerts', 'Tell me when I get a needed card']];
     let shown$ = {};
     try { shown$ = { ...(api.preferences?.get('display', {}) || {}) }; } catch {}
     const showing = key => shown$[key] !== false;
@@ -416,6 +439,12 @@ export default function init(parameters, api) {
     const countOf = card => counts[card.id] || 0;
     const percent = (n, full) => `${Math.min(100, 100 * n / full).toFixed(0)}%`;
     const bonusText = card => describeBonus(cardBonus(card, rules), rules);
+    const goalText = goal => describeBonus(goal.gives.map(([kind, value]) => ({ kind, value })), rules);
+    const reachedGoals = () => (bonusesOn ? milestonesReached(cards, counts, need, rules) : []);
+    const goalNews = before => {
+        const gained = reachedGoals().filter(goal => !before.includes(goal));
+        return gained.length ? ` Milestone reached: ${gained.map(goal => `${goal.pct}%, ${goalText(goal)}`).join('; ')}!` : '';
+    };
     const stateOf = card => { const n = countOf(card); return n >= needOf(card) ? 'done' : n > 0 ? 'partial' : 'missing'; };
 
     async function ask(text) {
@@ -541,6 +570,15 @@ export default function init(parameters, api) {
         if (bump) { void count.offsetWidth; count.classList.add('bump'); }
         $('.count .all').textContent = cards.length;
         $('.bar i').style.width = cards.length ? `${(100 * done / cards.length).toFixed(1)}%` : '0';
+        const bar = $('.bar');
+        bar.querySelectorAll('u').forEach(mark => mark.remove());
+        if (bonusesOn) for (const goal of rules.milestones || []) {
+            const mark = document.createElement('u');
+            mark.style.left = `${goal.pct}%`;
+            mark.title = `${goal.pct}%: ${goalText(goal)}`;
+            mark.classList.toggle('got', done * 100 >= goal.pct * cards.length);
+            bar.append(mark);
+        }
         $('.zeny').textContent = commas(zeny);
     }
 
@@ -821,6 +859,7 @@ export default function init(parameters, api) {
         busy = true;
         const how = BULK[mode];
         const before = new Map(rows.map(row => [row.card.id, stateOf(row.card)]));
+        const goalsBefore = reachedGoals();
         const was = zeny;
         const start = rows.map(row => counts[row.card.id] || 0);
         if (layer) layer.querySelector('.bulk-box').innerHTML = `<h3>${how.title}</h3><p class="progress">${how.doing}…</p>`;
@@ -830,6 +869,7 @@ export default function init(parameters, api) {
         let failed = false;
         for (let i = 0; i < batches.length; i++) {
             if (line) line.textContent = `${how.doing}, part ${i + 1} of ${batches.length}…`;
+            if (mode === 'wd') quietUntil = Date.now() + 4000;
             const reply = await ask(`${how.request} ${batches[i]}`);
             if (!reply.ok) { failed = true; break; }
             zeny = Number(reply.fields[0]) || 0;
@@ -846,6 +886,7 @@ export default function init(parameters, api) {
         renderRail();
         const lines = [`${how.done} ${commas(moved)} card${moved === 1 ? '' : 's'} for ${commas(Math.abs(was - zeny))} Zeny.`];
         if (finished.length) lines.push(`${finished.length} card${finished.length === 1 ? '' : 's'} completed!`);
+        if (goalNews(goalsBefore)) lines.push(goalNews(goalsBefore).trim());
         if (paused.length) lines.push(`${paused.length} card${paused.length === 1 ? '' : 's'} dropped below complete, so ${paused.length === 1 ? 'its bonus is' : 'their bonuses are'} paused.`);
         if (refused) lines.push(`${refused} could not be moved. Check your Zeny${mode === 'wd' ? ' and carrying weight' : ' and bag'}.`);
         if (failed) lines.push('The server stopped answering, so the rest were not moved. Nothing was lost.');
@@ -867,6 +908,8 @@ export default function init(parameters, api) {
         if (busy) return;
         busy = true;
         const before = stateOf(card);
+        const goalsBefore = reachedGoals();
+        if (button.dataset.op === 'wd') quietUntil = Date.now() + 4000;
         button.classList.add('busy');
         right.querySelectorAll('.btn').forEach(b => { b.disabled = true; });
         const reply = await ask(`${button.dataset.op === 'wd' ? 'wd' : 'dep'} ${card.id} ${amount}`);
@@ -883,6 +926,7 @@ export default function init(parameters, api) {
         renderRail();
         updateTile(card, completed);
         if (completed) notice.text += ' Card complete!';
+        if (reply.ok) notice.text += goalNews(goalsBefore);
         renderDetail();
         refreshBagMarks();
     }
@@ -995,9 +1039,15 @@ export default function init(parameters, api) {
     }
 
     function renderTotals() {
-        const total = totalBonus(cards, counts, need, rules, active, comboNeed);
+        const total = totalBonus(cards, counts, need, rules, active, comboNeed, true);
         const rows = rules.kinds.map((kind, i) => bonusesOn && total[i] ? `<div class="row" style="animation-delay:${i * 35}ms"><span>${escape(kind.label)}</span><b>+${commas(total[i])}</b></div>` : '').join('');
-        left.innerHTML = `<div class="totals"><h4>Active collection bonuses</h4>${rows || `<div class="empty">${bonusesOn ? 'Complete a card to earn its bonus.' : 'Collection bonuses are off in Settings.'}</div>`}</div>`;
+        const finishedCards = cards.filter(card => stateOf(card) === 'done').length;
+        const goals = (rules.milestones || []).map(goal => {
+            const target = Math.ceil(goal.pct * cards.length / 100);
+            const got = finishedCards >= target;
+            return `<div class="row mile${got ? ' got' : ''}"><span><strong>${goal.pct}%</strong> ${escape(goalText(goal))}</span><b>${got ? 'Reached' : `${commas(finishedCards)} / ${commas(target)}`}</b></div>`;
+        }).join('');
+        left.innerHTML = `<div class="totals"><h4>Active collection bonuses</h4>${rows || `<div class="empty">${bonusesOn ? 'Complete a card to earn its bonus.' : 'Collection bonuses are off in Settings.'}</div>`}<h4>Collection milestones</h4>${goals}</div>`;
         const keys = Object.keys(rules.categoryLabels).filter(key => cards.some(card => card.category === key));
         right.innerHTML = `<div class="side"><h4>Completed by slot</h4>${keys.map(key => {
             const group = cards.filter(card => card.category === key);
@@ -1090,6 +1140,39 @@ export default function init(parameters, api) {
         // Read the account again on every open: another character may have changed it.
         refresh();
     }
+
+    // A needed card picked up. Neither the server nor the client API reports a pickup,
+    // but every one (autoloot too) fills the client's ItemObtain popup with an icon
+    // whose class names the item. Our own withdrawals fill it as well, so those are quiet.
+    let quietUntil = 0;
+    const alertTimers = new Map();
+    const watched = new WeakSet();
+    async function cardObtained(id) {
+        if (!rules) {
+            loading ||= load().finally(() => { loading = null; });
+            try { await loading; } catch { return; }
+        }
+        if (!byId.has(id)) return;
+        if (win.isOpen()) await refreshBagMarks();
+        if (showing('alerts') && Date.now() >= quietUntil) await ask(`alert ${id}`);
+    }
+    function watchObtain(component) {
+        if (component?.name !== 'ItemObtain') return;
+        const box = component.root?.querySelector?.('.content');
+        if (!box || watched.has(box)) return;
+        watched.add(box);
+        const watcher = new MutationObserver(() => {
+            const id = obtainedItem(box);
+            if (!id) return;
+            clearTimeout(alertTimers.get(id));
+            // Several of one card at once are one message.
+            alertTimers.set(id, setTimeout(() => { alertTimers.delete(id); cardObtained(id); }, 400));
+        });
+        watcher.observe(box, { childList: true });
+        api.cleanup(() => watcher.disconnect());
+    }
+    api.on('ui:append', watchObtain, { replay: true });
+    api.cleanup(() => { for (const timer of alertTimers.values()) clearTimeout(timer); });
 
     const toggle = () => { if (win.isOpen()) win.hide(); else open(); };
     let inGame = false;

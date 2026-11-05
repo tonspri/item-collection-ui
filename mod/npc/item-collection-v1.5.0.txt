@@ -1,4 +1,4 @@
-//===== Item Collection UI v1.4.0 ==========================================
+//===== Item Collection UI v1.5.0 ==========================================
 //= Server side of the Item Collection window (client/index.js).
 //= The collection is account-wide: deposited cards are kept in the mod
 //= store's account scope under client.c.<card id>, which the window reads.
@@ -9,6 +9,7 @@
 //=   @icui <n> dep <card> <amt>  -> ok|<deposited>|<zeny>|<message>
 //=   @icui <n> wd <card> <amt>   -> ok|<deposited>|<zeny>|<message>
 //=   @icui <n> act <combo>       -> ok|<message>
+//=   @icui <n> alert <card>      -> ok| and, if the card still needs copies, a chat line
 //=   @icui <n> where <card>      -> ok|<mob>~<rate>~<level>~<name>|...
 //=   @icui <n> bagall            -> ok|<card>:<amount>,...
 //=   @icui <n> depm <card>:<amt>,...  -> ok|<zeny>|<refused>|<card>:<deposited>,...
@@ -37,6 +38,8 @@ OnInit:
 	setarray .valueA[0], 1, 10, 1, 1, 5, 1, 1, 5;
 	setarray .kindB[0], 1, -1, -1, -1, -1, -1, -1, -1;
 	setarray .valueB[0], 1, 0, 0, 0, 0, 0, 0, 0;
+	setarray .mileAt[0], 10, 25, 50, 75, 100;
+	setarray .mileGives$[0], "8:1,9:1,10:1,11:1,12:1,13:1", "18:2,19:2", "8:1,9:1,10:1,11:1,12:1,13:1,0:10,1:10", "18:3,19:3", "8:2,9:2,10:2,11:2,12:2,13:2,0:20,1:20";
 	setarray .comboName$[1], "Poring Family", "Field Critters", "Restless Dead", "Orc Warband", "Sky Hunters", "Shadow Thieves", "Arcane Circle", "Fallen Knights", "Legends of Midgard", "Night Terrors";
 	setarray .comboCards$[1], "4001,4004,4033,4196,4341", "4006,4002,4003,4009,4010", "4038,4025,4106,4110,4090", "4066,4071,4085,4256,4255", "4015,4325,4056,4040,4019", "4016,4020,4064,4042,4051", "4113,4190,4141,4171,4139", "4133,4136,4140,4320,4187", "4144,4142,4134,4131,4143", "4122,4116,4100,4212,4020";
 	setarray .comboGives$[1], "13:5,14:3", "10:3,18:3", "11:2,19:5", "8:5,0:15", "12:5,16:5", "9:5,15:5", "11:5,1:15", "10:5,18:5", "8:2,9:2,10:2,11:2,12:2,13:2,17:5", "20:5,21:5";
@@ -79,6 +82,15 @@ OnRequest:
 		.@out$ = callsub(S_MoveMany, "dep", .@atcmd_parameters$[2]);
 	} else if (.@op$ == "wdm") {
 		.@out$ = callsub(S_MoveMany, "wd", .@atcmd_parameters$[2]);
+	} else if (.@op$ == "alert") {
+		.@id = atoi(.@atcmd_parameters$[2]);
+		if ($@ICUI_tier[.@id] > 0 && getitemname(.@id) != "null") {
+			.@need = callsub(S_Need, $@ICUI_tier[.@id]);
+			.@have = modstore_get("account", "client.c." + .@id, 0);
+			if (.@have < .@need)
+				dispbottom "Item Collection: " + getitemname(.@id) + " " + .@have + " / " + .@need + " deposited, " + countitem(.@id) + " in your bag.";
+		}
+		.@out$ = "ok|";
 	} else if (.@op$ == "act") {
 		.@out$ = callsub(S_Activate, atoi(.@atcmd_parameters$[2]));
 	} else {
@@ -269,10 +281,23 @@ S_Apply:
 				continue;
 			if (modstore_get("account", "client.c." + .@id, 0) < .@need[.@tier])
 				continue;
+			.@done++;
 			.@c = $@ICUI_cat[.@id];
 			.@t[.kindA[.@c]] += .valueA[.@c] * .@tier;
 			if (.kindB[.@c] >= 0)
 				.@t[.kindB[.@c]] += .valueB[.@c] * .@tier;
+		}
+		// Milestones: goals are a share of this era's cards, and pause if a card is withdrawn.
+		for (.@m = 0; .@m < getarraysize(.mileAt) && $@ICUI_total; .@m++) {
+			if (.@done * 100 < .mileAt[.@m] * $@ICUI_total)
+				break;
+			deletearray .@gives$;
+			explode(.@gives$, .mileGives$[.@m], ",");
+			for (.@g = 0; .@g < getarraysize(.@gives$); .@g++) {
+				deletearray .@pair$;
+				explode(.@pair$, .@gives$[.@g], ":");
+				.@t[atoi(.@pair$[0])] += atoi(.@pair$[1]);
+			}
 		}
 		for (.@c = 1; .@c < getarraysize(.comboCards$); .@c++) {
 			if (!modstore_get("account", "client.a." + .@c, 0) || !callsub(S_ComboMet, .@c))

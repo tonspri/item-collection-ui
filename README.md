@@ -22,6 +22,8 @@ Each release is built by this repository's workflow from the commit it names, af
 - **Bonuses:** each login applies the full total with one `bonus_script`. A change during a session adds only the difference. The flags make it end at logout and keep it safe from dispels, death and other scripts' `bonus_script_clear`.
 - **Where to find:** each era's table names the monsters that drop a card. The script asks the server for each one's live rate with `getmobdrops`, so drop-rate settings are included.
 - **Bulk deposit:** the window asks for the bag's cards with `bagall`, then sends at most 15 cards per `depm` request to stay under the client's request cap. The bonus changes once per request.
+- **Milestones:** the goals are shares of the era's card count, which each era table sets as `$@ICUI_total`. The script adds them to the same `bonus_script` total, so a withdrawal below a goal removes its bonus.
+- **Needed card alerts:** the window reads the item ID from the client's item pickup popup and sends `alert <id>`. The script checks the card is on the list and still short of its limit before it writes a chat line.
 - **Settings:** the host chooses in the app, under Settings → Mods → Item Collection UI. That includes storing extra copies above a card's limit, which is off by default.
 - **Which cards:** every card a monster drops in that era's `mob_db`, from rAthena's tables. That is 449 in pre-renewal and 907 in renewal.
 - **Card art:** pictures are read from the player's own game files at run time. The mod ships only the file names, from the client's `num2cardillustnametable.txt`, and no card images.

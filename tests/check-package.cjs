@@ -80,6 +80,22 @@ function eraTable(folder) {
         });
     });
 
+    await check('milestones: server and window agree, goals ascend, and only known bonuses', () => {
+        const at = code.match(/setarray \.mileAt\[0\], ([^;]+);/)[1].split(',').map(s => Number(s.trim()));
+        assert.deepEqual(at, rules.milestones.map(g => g.pct));
+        assert.deepEqual(at, [...at].sort((a, b) => a - b));
+        const gives = [...code.match(/setarray \.mileGives\$\[0\], ([^;]+);/)[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
+        assert.deepEqual(gives, rules.milestones.map(g => g.gives.map(x => x.join(':')).join(',')));
+        for (const goal of rules.milestones) for (const [kind] of goal.gives) assert(rules.kinds[kind], String(goal.pct));
+        for (const [folder, file] of [['renewal', 'cards-re.json'], ['pre-renewal', 'cards-pre.json']])
+            assert(eraTable(folder).text.includes(`$@ICUI_total = ${json(`client/${file}`).length};`), folder);
+    });
+
+    await check('alerts: the server answers an alert request and only speaks for a card still needed', () => {
+        assert(code.includes('.@op$ == "alert"'));
+        assert(/if \(\.@have < \.@need\)\s+dispbottom "Item Collection: "/.test(code));
+    });
+
     await check('combos: server and window agree, every card is in both eras', () => {
         assert.deepEqual(npcCombo('comboName'), rules.combos.map(c => c.name));
         assert.deepEqual(npcCombo('comboCards'), rules.combos.map(c => c.cards.join(',')));
@@ -179,6 +195,16 @@ function eraTable(folder) {
         assert.deepEqual(plugin.parseCounts('4001:0,4002:3,'), [[4001, 0], [4002, 3]], 'a withdrawn card reports 0');
         assert.deepEqual(plugin.bulkRows([[1, 12]], new Map([[1, { id: 1, tier: 'normal', name: 'A' }]]), { 1: 10 }, need, true).map(r => r.take), [12], 'storing extras takes every copy');
         for (const part of plugin.bulkBatches(Array.from({ length: 15 }, (_, i) => ({ card: { id: 300000 + i }, take: 9999 })))) assert(`depm ${part}`.length <= 180, 'large amounts split earlier');
+        const goalRules = { kinds: [{ label: 'A' }], categories: {}, tierMultiplier: { normal: 1 }, milestones: [{ pct: 50, gives: [[0, 2]] }, { pct: 100, gives: [[0, 3]] }] };
+        const four = [1, 2, 3, 4].map(id => ({ id, tier: 'normal', category: 'x' }));
+        const needs = { normal: 1 };
+        assert.equal(plugin.milestonesReached(four, { 1: 1 }, needs, goalRules).length, 0);
+        assert.equal(plugin.milestonesReached(four, { 1: 1, 2: 1 }, needs, goalRules).length, 1, 'exactly 50% reaches the goal');
+        assert.deepEqual(plugin.totalBonus(four, { 1: 1, 2: 1, 3: 1, 4: 1 }, needs, goalRules, {}, 3, true), [5]);
+        assert.deepEqual(plugin.totalBonus(four, { 1: 1, 2: 1, 3: 1, 4: 1 }, needs, goalRules), [0], 'only when asked for');
+        assert.equal(plugin.milestonesReached([], {}, needs, goalRules).length, 0, 'no cards, no goals');
+        assert.equal(plugin.obtainedItem({ querySelector: () => ({ className: 'item-4001' }) }), 4001);
+        assert.equal(plugin.obtainedItem({ querySelector: () => null }), 0);
         assert.equal(plugin.formatRate(1), '0.01%');
         assert.equal(plugin.formatRate(100), '1%');
         assert.equal(plugin.formatRate(150), '1.5%');

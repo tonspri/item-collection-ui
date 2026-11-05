@@ -1,9 +1,10 @@
-//===== Item Collection UI v1.4.0: pre-renewal card table (generated) =====
+//===== Item Collection UI v1.5.0: pre-renewal card table (generated) =====
 -	script	ItemCollectionCards	-1,{
 	end;
 OnInit:
 	freeloop(1);
 	$@ICUI_era$ = "pre-renewal";
+	$@ICUI_total = 449;
 	$@ICUI_tier[4140] = 1; $@ICUI_cat[4140] = 0; $@ICUI_mobs$[4140] = "1219";
 	$@ICUI_tier[4409] = 1; $@ICUI_cat[4409] = 1; $@ICUI_mobs$[4409] = "1769";
 	$@ICUI_tier[4244] = 1; $@ICUI_cat[4244] = 4; $@ICUI_mobs$[4244] = "1193";

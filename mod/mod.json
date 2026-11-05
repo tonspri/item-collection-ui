@@ -1,6 +1,6 @@
 {
   "name": "item-collection-ui",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "DaggerHashimoto",
   "description": "A card collection window for your whole account. Deposit cards to complete them, activate themed combo sets, and every character on the account earns small permanent bonuses. Shows each card's real art, in a soft album-style window. Open it with the card icon in the Basic Info menu or @collection. Renewal and pre-renewal.",
   "requires": {

@@ -1,4 +1,4 @@
-# Item Collection UI v1.4.0
+# Item Collection UI v1.5.0
 
 A card collection window for your whole account. Deposit cards to complete them, activate themed combo sets, and every character on the account earns small permanent bonuses. Shows each card's real art, in a soft album-style window. Open it with the card icon in the Basic Info menu or @collection. Renewal and pre-renewal.
 
@@ -44,6 +44,18 @@ Open **Combos** to see 10 themed sets. Deposit 3 of each card in a set (an MVP c
 - **Legends of Midgard:** Osiris, Doppelganger, Dracula, Moonlight Flower, Orc Hero. STR +2, AGI +2, VIT +2, INT +2, DEX +2, LUK +2, ASPD % +5.
 - **Night Terrors:** Deviruchi, Isis, Sohee, Bongun, Familiar. Damage to Demons % +5, Damage to Undead % +5.
 
+## Milestones
+Complete a share of the era's cards for an extra bonus. Marks on the progress bar show each goal, and **Bonuses** lists them with your progress. Withdrawing below a goal pauses its bonus until you deposit again.
+
+- **10%:** STR +1, AGI +1, VIT +1, INT +1, DEX +1, LUK +1
+- **25%:** Max HP % +2, Max SP % +2
+- **50%:** STR +1, AGI +1, VIT +1, INT +1, DEX +1, LUK +1, ATK +10, MATK +10
+- **75%:** Max HP % +3, Max SP % +3
+- **100%:** STR +2, AGI +2, VIT +2, INT +2, DEX +2, LUK +2, ATK +20, MATK +20
+
+## Needed card alerts
+When you pick up a card the collection still needs, autoloot included, a chat line shows your progress and how many you carry. Turn it off in the gear menu.
+
 ## Settings
 These are in the app, under **Settings → Mods → Item Collection UI**. Click **Apply & restart** after changing them.
 - **Let the collection store extra copies:** deposit above a card's limit, up to 9,999. Off by default.
@@ -53,7 +65,7 @@ These are in the app, under **Settings → Mods → Item Collection UI**. Click 
 The gear button in the window has each player's own display choices.
 
 ## Adding your own combos
-Combos live in two files that must match: `npc/item-collection-v1.4.0.txt` (`.comboName$`, `.comboCards$`, `.comboGives$`) and `client/rules.json` (`combos`). Each bonus is a number from the bonus list plus a value, so `12:5` is the 13th bonus, +5. To add a bonus, add it at the end of both lists (`.bonus$` and `kinds`). It can be `bonus bLuk` or `bonus2 bAddRace,RC_Demon`.
+Combos live in two files that must match: `npc/item-collection-v1.5.0.txt` (`.comboName$`, `.comboCards$`, `.comboGives$`) and `client/rules.json` (`combos`). Each bonus is a number from the bonus list plus a value, so `12:5` is the 13th bonus, +5. To add a bonus, add it at the end of both lists (`.bonus$` and `kinds`). It can be `bonus bLuk` or `bonus2 bAddRace,RC_Demon`.
 
 Only use bonuses that simply add up, such as `bAddRace` or `bSubEle`. Withdrawing a card takes a bonus away by adding its negative, so effects like `bHPRegenRate` give wrong stats. Give each new combo the next id, and never reuse one: an activation is saved under its id.
 

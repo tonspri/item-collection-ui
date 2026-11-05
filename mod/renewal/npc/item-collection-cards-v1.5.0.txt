@@ -1,9 +1,10 @@
-//===== Item Collection UI v1.4.0: renewal card table (generated) =====
+//===== Item Collection UI v1.5.0: renewal card table (generated) =====
 -	script	ItemCollectionCards	-1,{
 	end;
 OnInit:
 	freeloop(1);
 	$@ICUI_era$ = "renewal";
+	$@ICUI_total = 907;
 	$@ICUI_tier[31022] = 1; $@ICUI_cat[31022] = 4; $@ICUI_mobs$[31022] = "2995";
 	$@ICUI_tier[300142] = 1; $@ICUI_cat[300142] = 0; $@ICUI_mobs$[300142] = "20803";
 	$@ICUI_tier[300150] = 1; $@ICUI_cat[300150] = 5; $@ICUI_mobs$[300150] = "20810";
