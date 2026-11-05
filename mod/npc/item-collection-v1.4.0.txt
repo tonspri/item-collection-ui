@@ -1,4 +1,4 @@
-//===== Item Collection UI v1.3.1 ==========================================
+//===== Item Collection UI v1.4.0 ==========================================
 //= Server side of the Item Collection window (client/index.js).
 //= The collection is account-wide: deposited cards are kept in the mod
 //= store's account scope under client.c.<card id>, which the window reads.
@@ -12,6 +12,7 @@
 //=   @icui <n> where <card>      -> ok|<mob>~<rate>~<level>~<name>|...
 //=   @icui <n> bagall            -> ok|<card>:<amount>,...
 //=   @icui <n> depm <card>:<amt>,...  -> ok|<zeny>|<refused>|<card>:<deposited>,...
+//=   @icui <n> wdm <card>:<amt>,...   -> the same, withdrawing
 //= Rates are the server's own, read live (1 = 0.01%). The last three can be
 //= long, so their answers come in several @@reply parts.
 //= Anything refused answers err|<message>. Level 0, so every check is here.
@@ -31,14 +32,14 @@ OnInit:
 	bindatcmd "icui", strnpcinfo(3) + "::OnRequest", 0, 99;
 	// Typing @collection opens the window too.
 	bindatcmd "collection", strnpcinfo(3) + "::OnOpen", 0, 99;
-	setarray .bonus$[0], "bBaseAtk", "bMatk", "bMaxHP", "bMaxSP", "bDef", "bMdef", "bFlee", "bHit", "bStr", "bAgi", "bVit", "bInt", "bDex", "bLuk", "bFlee2", "bCritical", "bLongAtkRate", "bAspdRate", "bMaxHPrate", "bMaxSPrate";
+	setarray .bonus$[0], "bonus bBaseAtk", "bonus bMatk", "bonus bMaxHP", "bonus bMaxSP", "bonus bDef", "bonus bMdef", "bonus bFlee", "bonus bHit", "bonus bStr", "bonus bAgi", "bonus bVit", "bonus bInt", "bonus bDex", "bonus bLuk", "bonus bFlee2", "bonus bCritical", "bonus bLongAtkRate", "bonus bAspdRate", "bonus bMaxHPrate", "bonus bMaxSPrate", "bonus2 bAddRace,RC_Demon", "bonus2 bAddRace,RC_Undead";
 	setarray .kindA[0], 0, 2, 4, 6, 3, 5, 7, 2;
 	setarray .valueA[0], 1, 10, 1, 1, 5, 1, 1, 5;
 	setarray .kindB[0], 1, -1, -1, -1, -1, -1, -1, -1;
 	setarray .valueB[0], 1, 0, 0, 0, 0, 0, 0, 0;
-	setarray .comboName$[1], "Poring Family", "Field Critters", "Restless Dead", "Orc Warband", "Sky Hunters", "Shadow Thieves", "Arcane Circle", "Fallen Knights", "Legends of Midgard";
-	setarray .comboCards$[1], "4001,4004,4033,4196,4341", "4006,4002,4003,4009,4010", "4038,4025,4106,4110,4090", "4066,4071,4085,4256,4255", "4015,4325,4056,4040,4019", "4016,4020,4064,4042,4051", "4113,4190,4141,4171,4139", "4133,4136,4140,4320,4187", "4144,4142,4134,4131,4143";
-	setarray .comboGives$[1], "13:5,14:3", "10:3,18:3", "11:2,19:5", "8:5,0:15", "12:5,16:5", "9:5,15:5", "11:5,1:15", "10:5,18:5", "8:2,9:2,10:2,11:2,12:2,13:2,17:5";
+	setarray .comboName$[1], "Poring Family", "Field Critters", "Restless Dead", "Orc Warband", "Sky Hunters", "Shadow Thieves", "Arcane Circle", "Fallen Knights", "Legends of Midgard", "Night Terrors";
+	setarray .comboCards$[1], "4001,4004,4033,4196,4341", "4006,4002,4003,4009,4010", "4038,4025,4106,4110,4090", "4066,4071,4085,4256,4255", "4015,4325,4056,4040,4019", "4016,4020,4064,4042,4051", "4113,4190,4141,4171,4139", "4133,4136,4140,4320,4187", "4144,4142,4134,4131,4143", "4122,4116,4100,4212,4020";
+	setarray .comboGives$[1], "13:5,14:3", "10:3,18:3", "11:2,19:5", "8:5,0:15", "12:5,16:5", "9:5,15:5", "11:5,1:15", "10:5,18:5", "8:2,9:2,10:2,11:2,12:2,13:2,17:5", "20:5,21:5";
 	end;
 
 OnOpen:
@@ -75,7 +76,9 @@ OnRequest:
 		callsub S_BagAll, .@req;
 		end;
 	} else if (.@op$ == "depm") {
-		.@out$ = callsub(S_DepositMany, .@atcmd_parameters$[2]);
+		.@out$ = callsub(S_MoveMany, "dep", .@atcmd_parameters$[2]);
+	} else if (.@op$ == "wdm") {
+		.@out$ = callsub(S_MoveMany, "wd", .@atcmd_parameters$[2]);
 	} else if (.@op$ == "act") {
 		.@out$ = callsub(S_Activate, atoi(.@atcmd_parameters$[2]));
 	} else {
@@ -138,9 +141,10 @@ S_BagAll:
 		dispbottom "@@reply " + .@req + " " + (.@i + 1) + "/" + .@parts + " " + (.@i ? "" : "ok|") + .@line$[.@i];
 	return;
 
-// S_DepositMany("card:amount,...") -> reply text. The bonus changes once, at the end.
-S_DepositMany:
-	explode(.@wants$, getarg(0), ",");
+// S_MoveMany("dep"|"wd", "card:amount,...") -> reply text. The bonus changes once, at the end.
+S_MoveMany:
+	.@how$ = getarg(0);
+	explode(.@wants$, getarg(1), ",");
 	.@done$ = "";
 	.@refused = 0;
 	for (.@i = 0; .@i < getarraysize(.@wants$) && .@i < 20; .@i++) {
@@ -148,7 +152,7 @@ S_DepositMany:
 		explode(.@pair$, .@wants$[.@i], ":");
 		.@id = atoi(.@pair$[0]);
 		deletearray .@result$;
-		explode(.@result$, callsub(S_Move, "dep", .@id, atoi(.@pair$[1]), 1), "|");
+		explode(.@result$, callsub(S_Move, .@how$, .@id, atoi(.@pair$[1]), 1), "|");
 		if (.@result$[0] == "ok")
 			.@done$ += .@id + ":" + .@result$[1] + ",";
 		else
@@ -173,15 +177,18 @@ S_Move:
 	.@have = modstore_get("account", .@path$, 0);
 	.@name$ = getitemname(.@id);
 	if (.@op$ == "dep") {
-		if (.@have >= .@need)
-			return "err|" + .@name$ + " is already complete.";
+		.@cap = (callfunc("F_ModSetting", "item-collection-ui", "store_extra", 0) ? 9999 : .@need);
+		if (.@have >= .@cap)
+			return "err|" + .@name$ + (.@cap == .@need ? " is already complete." : " is full.");
 		.@bag = countitem(.@id);
 		if (.@bag < 1)
 			return "err|You have no " + .@name$ + " in your inventory.";
-		.@n = min(.@n, .@need - .@have, .@bag);
-		.@cost = .@n * callfunc("F_ModSetting", "item-collection-ui", "deposit_fee", 1000);
-		if (Zeny < .@cost)
-			return "err|Depositing " + .@n + " costs " + callfunc("F_InsertComma", .@cost) + " Zeny.";
+		.@n = min(.@n, .@cap - .@have, .@bag);
+		// Dividing first, so a large amount can't overflow the multiplication.
+		.@fee = callfunc("F_ModSetting", "item-collection-ui", "deposit_fee", 1000);
+		if (.@fee && Zeny / .@fee < .@n)
+			return "err|Depositing " + .@n + " needs " + callfunc("F_InsertComma", .@fee) + " Zeny each.";
+		.@cost = .@n * .@fee;
 		delitem .@id, .@n;
 		if (!modstore_set("account", .@path$, .@have + .@n)) {
 			getitem .@id, .@n;
@@ -194,9 +201,10 @@ S_Move:
 		if (.@have < 1)
 			return "err|No " + .@name$ + " is deposited.";
 		.@n = min(.@n, .@have);
-		.@cost = .@n * callfunc("F_ModSetting", "item-collection-ui", "withdraw_fee", 10000);
-		if (Zeny < .@cost)
-			return "err|Withdrawing " + .@n + " costs " + callfunc("F_InsertComma", .@cost) + " Zeny.";
+		.@fee = callfunc("F_ModSetting", "item-collection-ui", "withdraw_fee", 10000);
+		if (.@fee && Zeny / .@fee < .@n)
+			return "err|Withdrawing " + .@n + " needs " + callfunc("F_InsertComma", .@fee) + " Zeny each.";
+		.@cost = .@n * .@fee;
 		if (!checkweight(.@id, .@n))
 			return "err|You cannot carry " + .@n + " more " + .@name$ + ".";
 		if (!modstore_set("account", .@path$, .@have - .@n))
@@ -283,7 +291,7 @@ S_Apply:
 	for (.@j = 0; .@j < getarraysize(.bonus$); .@j++) {
 		.@d = .@t[.@j] - @icui_t[.@j];
 		if (.@d) {
-			.@s$ += "bonus " + .bonus$[.@j] + "," + .@d + ";";
+			.@s$ += .bonus$[.@j] + "," + .@d + ";";
 			@icui_t[.@j] = .@t[.@j];
 		}
 	}

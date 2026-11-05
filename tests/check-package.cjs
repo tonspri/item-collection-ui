@@ -69,7 +69,8 @@ function eraTable(folder) {
     });
 
     await check('rules: server arrays match the window', () => {
-        assert.deepEqual(npcArray('bonus$'), rules.kinds.map(k => k.bonus));
+        const listed = [...code.match(/setarray \.bonus\$\[0\], ([^;]+);/)[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
+        assert.deepEqual(listed, rules.kinds.map(k => k.command));
         const keys = Object.keys(rules.categoryLabels);
         const [ka, va, kb, vb] = ['kindA', 'valueA', 'kindB', 'valueB'].map(n => npcArray(n).map(Number));
         keys.forEach((key, i) => {
@@ -91,7 +92,7 @@ function eraTable(folder) {
     });
 
     await check("bonus script: the largest possible total fits rAthena's 512 characters", () => {
-        const longest = rules.kinds.reduce((sum, k) => sum + `bonus ${k.bonus},-99999;`.length, 2);
+        const longest = rules.kinds.reduce((sum, k) => sum + `${k.command},-99999;`.length, 2);
         assert(longest < 512, `${longest} characters`);
     });
 
@@ -114,8 +115,8 @@ function eraTable(folder) {
     });
 
     await check('requests: where to find and bulk deposit reach the server script', () => {
-        for (const op of ['where', 'bagall', 'depm']) assert(code.includes(`.@op$ == "${op}"`), op);
-        for (const label of ['S_Where', 'S_BagAll', 'S_DepositMany']) assert(new RegExp(`^${label}:`, 'm').test(code), label);
+        for (const op of ['where', 'bagall', 'depm', 'wdm']) assert(code.includes(`.@op$ == "${op}"`), op);
+        for (const label of ['S_Where', 'S_BagAll', 'S_MoveMany']) assert(new RegExp(`^${label}:`, 'm').test(code), label);
         assert(/if \(!\.@quiet\)\s+callsub S_Apply;/.test(code), 'a bulk deposit changes the bonus once, at the end');
     });
 
@@ -123,6 +124,11 @@ function eraTable(folder) {
         const client = read('client/index.js');
         assert((client.match(/@container style\(--ro-game-cursor: on\) \{ \* \{ cursor: none !important; \} \}/g) || []).length >= 2, 'window and fallback button');
         assert(client.includes('.tile.missing .badge::before { content: \'\'; position: absolute; left: 5px;'));
+    });
+
+    await check('bonus2: only effects that add up, and the extras setting caps deposits', () => {
+        for (const k of rules.kinds.filter(k => k.arg)) assert.equal(k.bonus, 'bAddRace', k.label);
+        assert(code.includes('"store_extra", 0) ? 9999 : .@need'));
     });
 
     await check('card art: every card names a picture, in the byte-per-character form', () => {
@@ -170,6 +176,9 @@ function eraTable(folder) {
         assert.equal(plugin.matchCards(named, { query: '  ' }, () => 'missing').length, 2);
         assert.equal(plugin.matchCards(named, { query: '8' }, () => 'missing')[0].id, 8);
         assert.deepEqual(plugin.parseDrops(['1002~1~1~Poring', '1113~300~3~Drops', '', 'bad']).map(d => d.name), ['Drops', 'Poring']);
+        assert.deepEqual(plugin.parseCounts('4001:0,4002:3,'), [[4001, 0], [4002, 3]], 'a withdrawn card reports 0');
+        assert.deepEqual(plugin.bulkRows([[1, 12]], new Map([[1, { id: 1, tier: 'normal', name: 'A' }]]), { 1: 10 }, need, true).map(r => r.take), [12], 'storing extras takes every copy');
+        for (const part of plugin.bulkBatches(Array.from({ length: 15 }, (_, i) => ({ card: { id: 300000 + i }, take: 9999 })))) assert(`depm ${part}`.length <= 180, 'large amounts split earlier');
         assert.equal(plugin.formatRate(1), '0.01%');
         assert.equal(plugin.formatRate(100), '1%');
         assert.equal(plugin.formatRate(150), '1.5%');

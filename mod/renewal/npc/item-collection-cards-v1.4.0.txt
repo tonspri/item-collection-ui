@@ -1,4 +1,4 @@
-//===== Item Collection UI v1.3.1: renewal card table (generated) =====
+//===== Item Collection UI v1.4.0: renewal card table (generated) =====
 -	script	ItemCollectionCards	-1,{
 	end;
 OnInit:
